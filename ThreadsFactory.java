@@ -1,5 +1,3 @@
-import java.util.Map;
-
 /**
  * Interfejs fabryki wątków
  */
@@ -19,7 +17,7 @@ public interface ThreadsFactory {
 	 * @param run kod do wykonania w wątku
 	 * @return wątek z prawami do odczytu i jego pozycja startowa
 	 */
-	Map.Entry<Thread, Position2D> readerThread(Runnable run);
+	ThreadAndPosition readerThread(Runnable run);
 
 	/**
 	 * Metoda zwraca obiekt-wątek w stanie NEW. Wątek zwrócony przez tą metodę jako
