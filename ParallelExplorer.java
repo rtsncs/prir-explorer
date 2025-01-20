@@ -1,4 +1,5 @@
 import java.util.Set;
+import java.util.Stack;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -16,7 +17,7 @@ public class ParallelExplorer implements Explorer {
 	private Thread writer_thread;
 	private HashSet<Pair> results = new HashSet<>();
 	private int sum;
-	public OptionalInt[] my_table;
+	public OptionalInt[] visited;
 	private BlockingQueue<Pair> write_queue = new LinkedBlockingQueue<Pair>();
 
 	public void setThreadsFactory(ThreadsFactory factory) {
@@ -27,8 +28,8 @@ public class ParallelExplorer implements Explorer {
 
 	public void setTable(Table2D table) {
 		this.table = table;
-		my_table = new OptionalInt[table.cols() * table.rows()];
-		Arrays.fill(my_table, OptionalInt.empty());
+		visited = new OptionalInt[table.cols() * table.rows()];
+		Arrays.fill(visited, OptionalInt.empty());
 	};
 
 	public void start(int sum) {
@@ -41,12 +42,17 @@ public class ParallelExplorer implements Explorer {
 		for (int i = 0; i < factory.readersThreads(); i++) {
 			readers[i] = new Reader();
 			reader_threads[i] = factory.readerThread(readers[i]);
-			readers[i].setStart_pos(reader_threads[i].position());
+			readers[i].setRoot(reader_threads[i].position());
 		}
 		Arrays.sort(readers);
 		for (int i = 0; i < readers.length; i++) {
 			if (i != 0) {
-				readers[i - 1].setStop_pos(readers[i].start_pos);
+				int middle_i = (readers[i - 1].root.row() * table.cols() + readers[i - 1].root.col())
+						+ (readers[i].root.row() * table.cols() + readers[i].root.col()
+								- readers[i - 1].root.row() * table.cols() - readers[i - 1].root.col()) / 2;
+				var middle = new Position2D(middle_i % table.cols(), middle_i / table.cols());
+				readers[i - 1].setStop_pos(middle);
+				readers[i].setStart_pos(middle);
 			}
 		}
 		for (var thread : reader_threads) {
@@ -62,7 +68,8 @@ public class ParallelExplorer implements Explorer {
 	};
 
 	private class Reader implements Runnable, Comparable<Reader> {
-		Position2D start_pos;
+		Position2D start_pos = null;
+		Position2D root;
 		Position2D stop_pos = null;
 		Queue<Pair> queue = new LinkedList<>();
 
@@ -74,43 +81,60 @@ public class ParallelExplorer implements Explorer {
 			this.stop_pos = stop_pos;
 		}
 
+		public void setRoot(Position2D root) {
+			this.root = root;
+		}
+
 		@Override
 		public int compareTo(Reader other) {
-			int row = start_pos.row() - other.start_pos.row();
+			int row = root.row() - other.root.row();
 			if (row == 0) {
-				return start_pos.col() - other.start_pos.col();
+				return root.col() - other.root.col();
 			}
 			return row;
 		}
 
 		@Override
 		public void run() {
+			if (start_pos == null) {
+				start_pos = new Position2D(0, 0);
+			}
 			if (stop_pos == null) {
 				stop_pos = new Position2D(table.cols(), table.rows());
 			}
+			int start_i = start_pos.row() * table.cols() + start_pos.col();
+			int stop_i = stop_pos.row() * table.cols() + stop_pos.col();
 
-			int j = start_pos.col();
-			int k = start_pos.row() * table.cols() + start_pos.col();
-			outer: for (int i = start_pos.row(); i < table.rows(); i++) {
-				for (; j < table.cols(); j++) {
-					if (i == stop_pos.row() && j == stop_pos.col())
-						break outer;
-					my_table[k] = OptionalInt.of(table.get(new Position2D(j, i)));
-					if (j != 0) {
-						check(new Pair(new Position2D(j - 1, i), new Position2D(j, i)));
-					}
-					if (i != 0) {
-						check(new Pair(new Position2D(j, i - 1), new Position2D(j, i)));
-					}
-					if (i != 0 && j != 0) {
-						check(new Pair(new Position2D(j - 1, i - 1), new Position2D(j, i)));
-					}
-					if (i != 0 && j != table.cols() - 1) {
-						check(new Pair(new Position2D(j + 1, i - 1), new Position2D(j, i)));
-					}
-					k++;
+			Stack<Position2D> stack = new Stack<>();
+			stack.push(root);
+
+			while (!stack.empty()) {
+				var current = stack.pop();
+
+				int i = current.row() * table.cols() + current.col();
+
+				if (current.row() < 0 || current.row() >= table.rows() || current.col() < 0
+						|| current.col() >= table.cols() || visited[i].isPresent() || i < start_i || i > stop_i)
+					continue;
+
+				visited[i] = OptionalInt.of(table.get(current));
+				if (current.col() != 0) {
+					check(new Pair(new Position2D(current.col() - 1, current.row()), current));
 				}
-				j = 0;
+				if (current.row() != 0) {
+					check(new Pair(new Position2D(current.col(), current.row() - 1), current));
+				}
+				if (current.col() != 0 && current.row() != 0) {
+					check(new Pair(new Position2D(current.col() - 1, current.row() - 1), current));
+				}
+				if (current.col() != table.cols() - 1 && current.row() != 0) {
+					check(new Pair(new Position2D(current.col() + 1, current.row() - 1), current));
+				}
+
+				stack.push(new Position2D(current.col(), current.row() + 1));
+				stack.push(new Position2D(current.col() - 1, current.row()));
+				stack.push(new Position2D(current.col(), current.row() - 1));
+				stack.push(new Position2D(current.col() + 1, current.row()));
 			}
 			while (!queue.isEmpty()) {
 				var pos = queue.poll();
@@ -126,10 +150,9 @@ public class ParallelExplorer implements Explorer {
 		void check(Pair pos) {
 			int i = pos.first().row() * table.cols() + pos.first().col();
 			int j = pos.second().row() * table.cols() + pos.second().col();
-			if (my_table[i].isEmpty() || my_table[j].isEmpty()) {
+			if (visited[i].isEmpty() || visited[j].isEmpty()) {
 				queue.add(pos);
-			} else if (my_table[i].getAsInt() + my_table[j].getAsInt() == sum) {
-				results.add(pos);
+			} else if (visited[i].getAsInt() + visited[j].getAsInt() == sum) {
 				try {
 					write_queue.put(pos);
 				} catch (InterruptedException e) {
@@ -150,6 +173,7 @@ public class ParallelExplorer implements Explorer {
 					if (req.first() == null) {
 						terminated_readers++;
 					} else {
+						results.add(req);
 						table.set0(req.first());
 						table.set0(req.second());
 					}

@@ -6,22 +6,11 @@ public class Main {
                         8, 9, 0, 5, 5, 0, 1, 12, 5, 1, 3, 4, 11, 11, 1, 3, 3 },
                 8);
 
-        // int[] arr = new int[100_000_000];
-        // arr[23534] = 1;
-        // arr[23533] = 1;
-        // arr[24999000] = 1;
-        // arr[25000000] = 1;
-        // MyTable2D table = new MyTable2D(
-        // arr,
-        // 1000);
-
-        MyThreadsFactory factory = new MyThreadsFactory(5,
-                new Position2D[] { new Position2D(0, 5), new Position2D(0, 1),
-                        new Position2D(7, 1), new Position2D(7, 2), new Position2D(0, 0) });
-        // MyThreadsFactory factory = new MyThreadsFactory(4,
-        // new Position2D[] { new Position2D(0, 5000), new Position2D(0, 2500), new
-        // Position2D(0, 0),
-        // new Position2D(0, 7500) });
+        // MyThreadsFactory factory = new MyThreadsFactory(5,
+        // new Position2D[] { new Position2D(1, 4), new Position2D(2, 1),
+        // new Position2D(7, 1), new Position2D(7, 2), new Position2D(4, 0) });
+        MyThreadsFactory factory = new MyThreadsFactory(2,
+                new Position2D[] { new Position2D(6, 2), new Position2D(2, 3), });
 
         ParallelExplorer explorer = new ParallelExplorer();
         explorer.setTable(table);
@@ -67,7 +56,7 @@ public class Main {
                 System.out.println(read.getState());
             }
         }
-        for (var cell : explorer.my_table) {
+        for (var cell : explorer.visited) {
             if (cell.isEmpty()) {
                 System.out.println("Nie każde pole zostało skopiowane");
             }
